@@ -76,7 +76,7 @@ class UserControllerIntegrationTest {
         mockMvc.perform(post("/user")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(newUser)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name", is("Maria")))
                 .andExpect(jsonPath("$.email", is("maria@test.com")));
     }
@@ -96,9 +96,7 @@ class UserControllerIntegrationTest {
 
     @Test
     void deleteUser_ShouldReturnSuccessMessage() throws Exception {
-
-        TaskDTO taskDTO = new TaskDTO("teste", "Teste tarefa", "Finalizada");
-        when(taskClient.getTasksByUserId(1L)).thenReturn(Collections.singletonList(taskDTO));
+        when(taskClient.getTasksByUserId(user.getId())).thenReturn(Collections.emptyList());
 
         mockMvc.perform(delete("/user/{id}", user.getId()))
                 .andExpect(status().isOk())
@@ -106,5 +104,36 @@ class UserControllerIntegrationTest {
 
         Optional<User> deleted = userRepository.findById(user.getId());
         assert(deleted.isEmpty());
+    }
+
+
+    @Test
+    void getUserById_UserNotFound_ShouldReturn404() throws Exception {
+        mockMvc.perform(get("/user/{id}", 999L))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(containsString("Usuário não encontrado")));
+    }
+
+    @Test
+    void createUser_EmailAlreadyExists_ShouldReturn400() throws Exception {
+        User duplicateUser = new User();
+        duplicateUser.setName("Carlos Duplicate");
+        duplicateUser.setEmail(user.getEmail());
+
+        mockMvc.perform(post("/user")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(duplicateUser)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("Já existe um usuário cadastrado")));
+    }
+
+    @Test
+    void deleteUser_UserHasTasks_ShouldReturn400() throws Exception {
+        TaskDTO taskDTO = new TaskDTO("teste", "Teste tarefa", "Em Andamento");
+        when(taskClient.getTasksByUserId(user.getId())).thenReturn(Collections.singletonList(taskDTO));
+
+        mockMvc.perform(delete("/user/{id}", user.getId()))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("Usuário não pode ser deletado")));
     }
 }

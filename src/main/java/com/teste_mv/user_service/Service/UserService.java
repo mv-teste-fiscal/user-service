@@ -2,6 +2,9 @@ package com.teste_mv.user_service.Service;
 
 import com.teste_mv.user_service.DTO.TaskDTO;
 import com.teste_mv.user_service.Entities.User;
+import com.teste_mv.user_service.Exceptions.UserAlreadyExistsException;
+import com.teste_mv.user_service.Exceptions.UserHasTasksException;
+import com.teste_mv.user_service.Exceptions.UserNotFoundException;
 import com.teste_mv.user_service.Feign.TaskClient;
 import com.teste_mv.user_service.Repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,20 +12,21 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-
 @Service
 public class UserService {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
+    private final TaskClient taskClient;
 
     @Autowired
-    private TaskClient taskClient;
+    public UserService(UserRepository userRepository, TaskClient taskClient) {
+        this.userRepository = userRepository;
+        this.taskClient = taskClient;
+    }
 
     public User createUser(User user) {
-        if (userRepository.findByEmail(user.getEmail()).isPresent()) {
-            throw new IllegalArgumentException("Já existe um usuário cadastrado com este e-mail: " + user.getEmail());
-        }
+        userRepository.findByEmail(user.getEmail())
+                .ifPresent(u -> { throw new UserAlreadyExistsException(user.getEmail()); });
 
         return userRepository.save(user);
     }
@@ -33,29 +37,26 @@ public class UserService {
 
     public User getUserById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado com id " + id));
+                .orElseThrow(() -> new UserNotFoundException(id));
     }
 
-    public User updateUser(Long id, User userUpdated) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado com id " + id));
+    public User updateUser(Long id, User updatedUser) {
+        User user = getUserById(id);
 
-        user.setName(userUpdated.getName());
-        user.setEmail(userUpdated.getEmail());
+        user.setName(updatedUser.getName());
+        user.setEmail(updatedUser.getEmail());
 
         return userRepository.save(user);
     }
 
     public void deleteUser(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado com id " + id));
+        User user = getUserById(id);
 
         List<TaskDTO> tasks = taskClient.getTasksByUserId(id);
-
-        if (tasks.isEmpty()) {
-            userRepository.delete(user);
-        }else {
-            throw new RuntimeException("Usuário não pode ser deleteado pois possui tarefas associadas ");
+        if (!tasks.isEmpty()) {
+            throw new UserHasTasksException(id);
         }
+
+        userRepository.delete(user);
     }
 }
