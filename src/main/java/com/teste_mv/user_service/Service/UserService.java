@@ -42,10 +42,15 @@ public class UserService {
 
     public User updateUser(Long id, User updatedUser) {
         User user = getUserById(id);
+        if(!updatedUser.getEmail().equals(user.getEmail())) {
+            userRepository.findByEmail(updatedUser.getEmail())
+                    .ifPresent(u -> {
+                        throw new UserAlreadyExistsException(user.getEmail());
+                    });
 
-        user.setName(updatedUser.getName());
-        user.setEmail(updatedUser.getEmail());
-
+            user.setName(updatedUser.getName());
+            user.setEmail(updatedUser.getEmail());
+        }
         return userRepository.save(user);
     }
 
